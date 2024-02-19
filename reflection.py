@@ -372,9 +372,11 @@ def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, re
     Calculate the reflection signature given the transmitter, receiver, and reflection plane
 
     The reflection signature is the amount of area reflecting back to the receiver over time
-    The return is an two arrays of area values, at a rate of 'rate' samples per second
+    The return is an two arrays of area values and a float, at a rate of 'rate' samples per second
     The first area is the amount of area reflecting back at that time, the second is the amount 
     of distance traveled to get there
+    The float is the approximate distance to the plane to use when calculating intensity
+
     if distance = 0, that means that the wave did not reflect in that amount of time
 
     max_time is the amount of time between the first and last reflection output.
@@ -415,6 +417,9 @@ def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, re
     # Create a the ellipsoid that will be expanded during sim
     expansion_ellipsoid: Ellipsoid = Ellipsoid.from_focal_points(transmitter_point, receiver_point, first_dist)
 
+    # Calculate approximate distance to the plane
+    approx_distance = (expansion_ellipsoid.center - intersect_point).len()
+
     # Transform all scene elements so they are still in the same relative positions
     rotation, translation = expansion_ellipsoid.move_and_align_with_origin()
     plane_transformed = reflection_plane.transform(rotation, translation)
@@ -452,7 +457,37 @@ def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, re
     # Approximate true value by assuming l[0] - l[1] = l[1] - l[2]
     signature[start_point] = 2 * signature[start_point + 1] - signature[start_point + 2]
     
-    return (signature, distances)
+    return (signature, distances, approx_distance)
+
+def convert_to_db_loss(area: float, dist_to_reflection: float, total_distance: float, albedo = 1):
+    """
+    Given:
+    area : Area of the effective reflection
+    dist_to_reflection : Distance from transmitter to reflection
+    total_distance : Total distance traveled by wave from transmitter to receiver
+    albedo = 1 : The reflectivity of the surface (0 = total absorption, 1 = total reflection)
+
+    Calculate the expected db loss over that distance
+    """
+
+    # The method employed here is an approximation, as the true solution requires integration
+    # We instead remap the effective area to a sphere of equal surface area around the transmitter
+    # The radius of this sphere acts as the "first transmission distance"
+    # The "second transmission distance" is the approximate distance from the plane to the receiver
+    # Then by calculating the inverse square law over the transmission distance we get our dB loss
+    
+    # Calculate the amount of area that is actually "transmitting"
+    effective_area = area * albedo
+
+    # Remap to the area of a sphere
+    sphere_radius = math.sqrt(effective_area / (4 * math.pi))
+
+    # Calculate effective distance
+    distance = sphere_radius + total_distance - dist_to_reflection
+
+    # Calculate the dB loss over the effective transmission distance
+    return 20 * math.log10(distance) + 11
+
 
 
 if __name__ == "__main__":
@@ -471,7 +506,7 @@ if __name__ == "__main__":
     listener = Vector3(0,2,0)
     transmitter = Vector3(-75,8,0)
     plane = Plane(Vector3(0,0,0), Vector3.Z(), Vector3.X())
-    sig, dist = reflection_signature(transmitter, listener, plane, max_time=.2)
+    sig, dist, p_dist = reflection_signature(transmitter, listener, plane, max_time=.2)
 #    sig = sig * (1 / dist ** 2)
     
     inter_point = find_ellipsoid_tangent_point(listener, transmitter, plane)
@@ -486,13 +521,18 @@ if __name__ == "__main__":
     theo[0] = theo[1]
 
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(1,2)
+    fig, ax = plt.subplots(1,3)
     ax[0].plot(dist / 343, sig)
     ax[0].plot(dist / 343, theo)
     ax[0].set_title('Reflection Area vs Time')
     ax[1].plot(dist / 343, sig / (dist ** 2))
     ax[1].plot(dist / 343, theo / (dist ** 2))
     ax[1].set_title('ISL Adjusted Reflection vs Time')
+    ax[1].plot(dist / 343, sig / (dist ** 2))
+    ax[1].plot(dist / 343, theo / (dist ** 2))
+    ax[2].set_title('dB loss vs Time')
+    ax[2].plot(dist /343, [convert_to_db_loss(s, p_dist, d) for s, d in zip(sig, dist)])
+    ax[2].plot(dist /343, [convert_to_db_loss(t, p_dist, d) for t, d in zip(theo, dist)])
     fig.suptitle('Reflection Signature')
     plt.show()
 
