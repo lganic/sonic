@@ -10,7 +10,7 @@ Point = Tuple[float, float]
 
 Calculating the behavior of diffuse wave reflections over time.
 
-The method employed approximates the recieved reflection intensity over time
+The method employed approximates the received reflection intensity over time
 by approximating the integral of the intersection of
 an expanding ellipsoid with the diffuse reflection plane.
 
@@ -131,7 +131,7 @@ class Plane:
         """
         Returns the X,Y coordinate of the intersection between Ray and plane
         The X and Y axis are the orientations specified, so orthogonal vectors
-        are reccomended, but not required.
+        are recommended, but not required.
         orientation1 = X axis
         orientation2 = Y axis
         """
@@ -165,7 +165,7 @@ class Ellipsoid:
         """
         self.center = center
 
-        # Check whether the axis are orthogonal to eachother
+        # Check whether the axis are orthogonal to each other
         dot_1 = abs(ax1.dot(ax2))
         dot_2 = abs(ax2.dot(ax3))
         dot_3 = abs(ax3.dot(ax1))
@@ -234,9 +234,9 @@ class Ellipsoid:
         a, b, c = self.coefficients()
         return f"((x^2)/({(a**2):.20f}))+((y^2)/({(b**2):.20f}))+((z^2)/({(c**2):.20f}))=1"
 
-    def move_and_allign_with_origin(self) -> tuple[np.ndarray, Vector3]:
+    def move_and_align_with_origin(self) -> tuple[np.ndarray, Vector3]:
         """
-        Moves the ellipsoid to the origin, and rotates it to allign:
+        Moves the ellipsoid to the origin, and rotates it to align:
 
         semi major axis with x axis
         intermediate axis with y axis
@@ -273,12 +273,12 @@ class Ellipsoid:
 
         and return them as an ellipse
 
-        NOTE: the ellipse MUST BE AT, AND ALLIGNED WITH ORIGIN
-        run move_and_allign_with_origin to transform the scene properly
+        NOTE: the ellipse MUST BE AT, AND ALIGNED WITH ORIGIN
+        run move_and_align_with_origin to transform the scene properly
         """
 
         if not self.center == 0:
-            # Its 1 AM, im gonna ignore the case where its at the origin, but not alligned
+            # Its 1 AM, im gonna ignore the case where its at the origin, but not aligned
             # TODO : Put that in
             raise ValueError("Ellipsoid not centered at origin, read docs")
 
@@ -337,7 +337,7 @@ def find_ellipsoid_tangent_point(focal_1 : Vector3, focal_2: Vector3, targetPlan
     Given two focal points of an ellipse, find the point in 3D space
     where the plane would be tangent to the ellipsoid
     """
-    # There is an enourmous amount of calculus behind this, but it works
+    # There is an enormous amount of calculus behind this, but it works
     # I leave the proof as a task to the reader :)
 
     # Cast rays from the focal points to the plane
@@ -367,11 +367,11 @@ def find_ellipsoid_tangent_point(focal_1 : Vector3, focal_2: Vector3, targetPlan
     return focal_intersect_1 + (intersect_diff_vec.norm() * dx)
 
 
-def reflection_signature(transmitter_point: Vector3, reciever_point: Vector3, reflection_plane: Plane, rate: float = 44100, max_time: float = 1, speed = 343) -> np.ndarray:
+def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, reflection_plane: Plane, rate: float = 44100, max_time: float = 1, speed = 343) -> Tuple[np.ndarray, np.ndarray, float]:
     """
-    Calculate the reflection signature given the transmitter, reciever, and reflection plane
+    Calculate the reflection signature given the transmitter, receiver, and reflection plane
 
-    The relfection signature is the amount of area reflecting back to the reciever over time
+    The reflection signature is the amount of area reflecting back to the receiver over time
     The return is an two arrays of area values, at a rate of 'rate' samples per second
     The first area is the amount of area reflecting back at that time, the second is the amount 
     of distance traveled to get there
@@ -379,31 +379,31 @@ def reflection_signature(transmitter_point: Vector3, reciever_point: Vector3, re
 
     max_time is the amount of time between the first and last reflection output.
     NOTE: the actual reflection signature may be longer than the max_time might suggest, 
-    # since the wave takes some amount of time to actually make it to the reciever
-    # Therefore length of reflection signature = time till first reflection recieved + max_time
+    # since the wave takes some amount of time to actually make it to the receiver
+    # Therefore length of reflection signature = time till first reflection receiver + max_time
 
     speed is the speed of the wave, in m/s
 
     oh yeah all units in meters of course
     """
 
-    reciever_transmitter_d2 = (transmitter_point - reciever_point).len() / 2
+    receiver_transmitter_d2 = (transmitter_point - receiver_point).len() / 2
 
-    intersect_point = find_ellipsoid_tangent_point(transmitter_point, reciever_point, reflection_plane)
+    intersect_point = find_ellipsoid_tangent_point(transmitter_point, receiver_point, reflection_plane)
 
     dist_1 = (transmitter_point - intersect_point).len()
-    dist_2 = (reciever_point - intersect_point).len()
+    dist_2 = (receiver_point - intersect_point).len()
 
     first_dist = dist_1 + dist_2
     first_time = first_dist / speed
 
     dist_delta = speed / rate # Amount of distance between area calculations
 
-    n_samp = int(rate * (max_time + first_time))
-    signature = np.zeros(n_samp)
-    distances = np.zeros(n_samp)
+    n_sample = int(rate * (max_time + first_time))
+    signature = np.zeros(n_sample)
+    distances = np.zeros(n_sample)
 
-    start_point = round(first_time) # Yeah this isnt accurate, it will result in the reflection being mistimed by at most (1 / (2 * rate)) seconds, so for rate = 44100, around 11 microseconds
+    start_point = round(first_time) # Yeah this isn't accurate, it will result in the reflection being mistimed by at most (1 / (2 * rate)) seconds, so for rate = 44100, around 11 microseconds
     index = start_point
     current_distance = first_dist
     old_area = 0
@@ -413,16 +413,16 @@ def reflection_signature(transmitter_point: Vector3, reciever_point: Vector3, re
     # They are still at the same relative positions when the ellipsoid is moved there
 
     # Create a the ellipsoid that will be expanded during sim
-    expansion_ellipsoid: Ellipsoid = Ellipsoid.from_focal_points(transmitter_point, reciever_point, first_dist)
+    expansion_ellipsoid: Ellipsoid = Ellipsoid.from_focal_points(transmitter_point, receiver_point, first_dist)
 
     # Transform all scene elements so they are still in the same relative positions
-    rotation, translation = expansion_ellipsoid.move_and_allign_with_origin()
+    rotation, translation = expansion_ellipsoid.move_and_align_with_origin()
     plane_transformed = reflection_plane.transform(rotation, translation)
     intersect_transformed = (intersect_point + translation).apply_matrix(rotation)
 #    transmitter_transformed = (transmitter_point + translation).apply_rot_matrix(rotation)
-#    reciever_transformed = (reciever_point + translation).apply_rot_matrix(rotation)
+#    receiver_transformed = (receiver_point + translation).apply_rot_matrix(rotation)
 
-    while index < n_samp:
+    while index < n_sample:
         # Find the intersection size
         ax1, ax2 = expansion_ellipsoid.size_ellipse_intersection(plane_transformed, intersect_transformed)
 
@@ -436,10 +436,6 @@ def reflection_signature(transmitter_point: Vector3, reciever_point: Vector3, re
 
         index += 1
 
-        # due to floating point aritmetic error, the first signal element tends to be overestimated
-        # Employ hacky solution
-        signature[start_point] = signature[start_point + 1]
-
         old_area = area
 
         current_distance += dist_delta
@@ -447,10 +443,14 @@ def reflection_signature(transmitter_point: Vector3, reciever_point: Vector3, re
         # Resize the ellipsoid for next round
 
         major_axis_length = current_distance / 2
-        minor_axis_length = math.sqrt(math.pow(major_axis_length, 2) - math.pow(reciever_transmitter_d2, 2))
+        minor_axis_length = math.sqrt(math.pow(major_axis_length, 2) - math.pow(receiver_transmitter_d2, 2))
         expansion_ellipsoid.semi_major.set_length(major_axis_length)
         expansion_ellipsoid.semi_minor.set_length(minor_axis_length)
         expansion_ellipsoid.intermediate.set_length(minor_axis_length)
+    
+    # due to floating point arithmetic error, the first signal element tends to be overestimated
+    # Approximate true value by assuming l[0] - l[1] = l[1] - l[2]
+    signature[start_point] = 2 * signature[start_point + 1] - signature[start_point + 2]
     
     return (signature, distances)
 
@@ -487,12 +487,12 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1,2)
-    ax[0].plot(dist, sig)
-    ax[0].plot(dist, theo)
-    ax[0].set_title('Reflection Area vs Distance')
-    ax[1].plot(dist, sig / (dist ** 2))
-    ax[1].plot(dist, theo / (dist ** 2))
-    ax[1].set_title('ISL Adjusted Reflection vs Distance')
+    ax[0].plot(dist / 343, sig)
+    ax[0].plot(dist / 343, theo)
+    ax[0].set_title('Reflection Area vs Time')
+    ax[1].plot(dist / 343, sig / (dist ** 2))
+    ax[1].plot(dist / 343, theo / (dist ** 2))
+    ax[1].set_title('ISL Adjusted Reflection vs Time')
     fig.suptitle('Reflection Signature')
     plt.show()
 
