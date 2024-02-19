@@ -2,7 +2,7 @@ import math
 
 """Atmosphere.py
 
-Atmoshperic utilities
+Atmospheric utilities
 
 Using documentation from:
 ISO-9613 Version:1993 (There are 2024 versions, $200 to read them though)
@@ -20,15 +20,15 @@ GAS_CONSTANT = 8.314 # L kPa / mol K
 REF_AMBIENT_PRESS = 101.325 # kPa
 REF_AMBIENT_TEMP = 293.15 # K
 
-def celcius_to_kelvin(temp_c: float) -> float:
+def celsius_to_kelvin(temp_c: float) -> float:
     """
-    Convert a temperature in Celcius to Kelvin
+    Convert a temperature in Celsius to Kelvin
     """
     return temp_c + 273.15
 
-def kelvin_to_celcius(temp_k: float) -> float:
+def kelvin_to_celsius(temp_k: float) -> float:
     """
-    Convert a temperature in Kelvin to Celcius
+    Convert a temperature in Kelvin to Celsius
     """
     return temp_k - 273.15
 
@@ -46,7 +46,7 @@ def relative_to_molar_conc_humidity(temperature : float, pressure: float, rel_hu
     """
 
     # Use the Arden Buck equation to calculate the saturation vapor pressure
-    t_c = kelvin_to_celcius(temperature)
+    t_c = kelvin_to_celsius(temperature)
     if t_c < 0:
         # Temperature is below freezing, convention dictates
         # we evaluate relative humidity over ice, not water
@@ -89,17 +89,17 @@ def nitrogen_relaxation_frequency(pressure : float, temperature : float, water_m
 
 class Atmosphere:
     """
-    Data class for atmoshperic related constants.
+    Data class for atmospheric related constants.
     """
     def __init__(self, temp_c : float, press_atm : float, rel_humidity : float = 0):
         """
         Create an atmosphere reference with:
 
-        temp_c : temperature (celcius)
+        temp_c : temperature (celsius)
         press_atm : pressure (atmospheres)
         rel_humidity : relative humidity (0 to 1)
         """
-        self.temp_k = celcius_to_kelvin(temp_c)
+        self.temp_k = celsius_to_kelvin(temp_c)
         self.press_kpa = press_atm * 101.325
         self.h20_molar_conc = relative_to_molar_conc_humidity(self.temp_k, self.press_kpa, rel_humidity)
         self.oxy_relax = oxygen_relaxation_frequency(self.press_kpa, self.h20_molar_conc)
@@ -109,19 +109,19 @@ class Atmosphere:
     @staticmethod
     def stp():
         """
-        0° Celcius, 1 atm pressure, no humidity
+        0° Celsius, 1 atm pressure, no humidity
         """
-        return atmosphere(0, 1, 0)
+        return Atmosphere(0, 1, 0)
 
     @staticmethod
     def from_temperature(self, temp_c : float, rel_humidity : float = 0):
         """
         Assuming standard pressure of 1 atm, create atmosphere
 
-        temp_c : temperature (celcius)
+        temp_c : temperature (celsius)
         rel_humidity : relative humidity (0 to 1)
         """
-        return atmosphere(temp_c, 1, rel_humidity = rel_humidity)
+        return Atmosphere(temp_c, 1, rel_humidity = rel_humidity)
 
     def attenuation_coefficient(self, frequency : float):
         """
