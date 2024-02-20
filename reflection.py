@@ -426,6 +426,9 @@ def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, re
     intersect_transformed = (intersect_point + translation).apply_matrix(rotation)
 #    transmitter_transformed = (transmitter_point + translation).apply_rot_matrix(rotation)
 #    receiver_transformed = (receiver_point + translation).apply_rot_matrix(rotation)
+    
+    # Calculate the coefficient of Lambertian reflectance
+    lambert_coeff = abs((transmitter_point - intersect_point).norm().dot(reflection_plane.normal))
 
     while index < n_sample:
         # Find the intersection size
@@ -434,7 +437,8 @@ def reflection_signature(transmitter_point: Vector3, receiver_point: Vector3, re
         # Area of an ellipse
         area = math.pi * ax1 * ax2
 
-        signature[index] = area - old_area
+        # Calculate ring area, and apply Lambertian reflectance
+        signature[index] = lambert_coeff * (area - old_area)
 
         # Record distance
         distances[index] = current_distance
@@ -471,13 +475,16 @@ def convert_to_db_loss(area: float, dist_to_reflection: float, total_distance: f
     """
 
     # The method employed here is an approximation, as the true solution requires integration
-    # We instead remap the effective area to a sphere of equal surface area around the transmitter
+    # We instead remap the innactive area to a sphere of equal surface area around the transmitter
     # The radius of this sphere acts as the "first transmission distance"
     # The "second transmission distance" is the approximate distance from the plane to the receiver
     # Then by calculating the inverse square law over the transmission distance we get our dB loss
     
     # Calculate the amount of area that is actually "transmitting"
-    effective_area = area * albedo
+    transmitting_area = area * albedo
+
+    # Area of nontransmitting surface
+    effective_area = 4 * math.pi * math.pow(dist_to_reflection, 2) - transmitting_area
 
     # Remap to the area of a sphere
     sphere_radius = math.sqrt(effective_area / (4 * math.pi))
@@ -510,6 +517,7 @@ if __name__ == "__main__":
 #    sig = sig * (1 / dist ** 2)
     
     inter_point = find_ellipsoid_tangent_point(listener, transmitter, plane)
+    lambert_coeff = abs((transmitter - inter_point).norm().dot(plane.normal))
     f_dist = (transmitter - inter_point).len() + (listener - inter_point).len()
     f_time = f_dist / 343
 
@@ -517,7 +525,7 @@ if __name__ == "__main__":
     for index, d in enumerate(dist):
         if index == 0:
             continue
-        theo[index] = math.pi * (math.pow(dist[index] / 2, 2) - math.pow(dist[index - 1] / 2, 2))
+        theo[index] = lambert_coeff * math.pi * (math.pow(dist[index] / 2, 2) - math.pow(dist[index - 1] / 2, 2))
     theo[0] = theo[1]
 
     import matplotlib.pyplot as plt
