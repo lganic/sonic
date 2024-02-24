@@ -74,7 +74,7 @@ class Spectrogram:
         """
         f_res = self.sr / self.n_fft
         n_bins = (self.n_fft // 2) + 1
-        frequencies = list(np.arrange(0, n_bins) * f_res)
+        frequencies = list(np.arange(0, n_bins) * f_res)
         return frequencies
     
     def preview(self, filename: str)-> None:
