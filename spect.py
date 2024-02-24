@@ -28,6 +28,7 @@ class Spectrogram:
     Readable, and writable spectrogram utility
     """
     def __init__(self, magnitude: np.ndarray, phase: np.ndarray, sample_rate: int = 44100, n_fft: int = 8192, hop_length: int = 16):
+        print(np.max(magnitude), np.min(magnitude))
         self.magnitude = magnitude
         self.phase = phase
         self.strength_buffer = np.ones(self.magnitude.shape[1])
@@ -49,7 +50,7 @@ class Spectrogram:
             y, sr = librosa.load(audio_input, sr=None)  # Load audio file
         elif isinstance(audio_input, np.ndarray):  # Directly use the NumPy array
             y = audio_input
-            sr = sample_rate
+            sr = sample_rate 
         else:
             raise ValueError("Audio input must be a filepath or a NumPy array")
 
@@ -163,9 +164,10 @@ class Spectrogram:
         index_2 = index_1 + 1
         index_float = index - index_1
 
+        # Ensure that the spectrogram has enough space for the new data
         self.ensure_length(index_2)
 
-
+        # Load existing data from memory
         working_mag_1 = self.magnitude[:, index_1]
         working_mag_2 = self.magnitude[:, index_2]
         working_pha_1 = self.phase[:, index_1]
@@ -173,19 +175,36 @@ class Spectrogram:
         working_str_1 = self.strength_buffer[index_1]
         working_str_2 = self.strength_buffer[index_2]
 
+        # Recreate the waveforms using the existing data
         working_mag_1 /= working_str_1
         working_mag_2 /= working_str_2
 
+        # Add the new waveforms to the old waveforms
         output_mag_1, output_phase_1 = add_2_sine_waves((1 - index_float) * slice_mag, slice_phase, working_mag_1, working_pha_1)
         output_mag_2, output_phase_2 = add_2_sine_waves(index_float * slice_mag, slice_phase, working_mag_2, working_pha_2)
 
-        self.magnitude[:, index_1] = output_mag_1
-        self.magnitude[:, index_2] = output_mag_2
+        # Update the strength buffer
+        self.strength_buffer[index_1] += (1 - index_float)
+        self.strength_buffer[index_2] += index_float
+
+        # Save the new waveforms
+        self.magnitude[:, index_1] = output_mag_1 * self.strength_buffer[index_1]
+        self.magnitude[:, index_2] = output_mag_2 * self.strength_buffer[index_2]
         self.phase[:, index_1] = output_phase_1
         self.phase[:, index_2] = output_phase_2
 
-        self.strength_buffer[index_1] += (1 - index_float)
-        self.strength_buffer[index_2] += index_float
+    
+    def duration(self):
+        """
+        Return the duration of the spectrogram in seconds
+        """
+        # Calculate the time duration per hop
+        time_per_hop = self.hop_length / self.sr
+    
+        # Calculate the total length of the audio track
+        audio_length = self.magnitude.shape[1] * time_per_hop
+
+        return audio_length
 
 
 
