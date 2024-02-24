@@ -28,7 +28,6 @@ class Spectrogram:
     Readable, and writable spectrogram utility
     """
     def __init__(self, magnitude: np.ndarray, phase: np.ndarray, sample_rate: int = 44100, n_fft: int = 8192, hop_length: int = 16):
-        print(np.max(magnitude), np.min(magnitude))
         self.magnitude = magnitude
         self.phase = phase
         self.strength_buffer = np.ones(self.magnitude.shape[1])
@@ -48,6 +47,7 @@ class Spectrogram:
 
         if isinstance(audio_input, str):  # Assume it's a filepath
             y, sr = librosa.load(audio_input, sr=None)  # Load audio file
+            print(np.max(y), np.min(y), np.mean(y))
         elif isinstance(audio_input, np.ndarray):  # Directly use the NumPy array
             y = audio_input
             sr = sample_rate 
@@ -168,8 +168,8 @@ class Spectrogram:
         self.ensure_length(index_2)
 
         # Load existing data from memory
-        working_mag_1 = self.magnitude[:, index_1]
-        working_mag_2 = self.magnitude[:, index_2]
+        working_mag_1 = np.sqrt(self.magnitude[:, index_1])
+        working_mag_2 = np.sqrt(self.magnitude[:, index_2]) # sqrt because power spectrogram
         working_pha_1 = self.phase[:, index_1]
         working_pha_2 = self.phase[:, index_2]
         working_str_1 = self.strength_buffer[index_1]
@@ -188,8 +188,8 @@ class Spectrogram:
         self.strength_buffer[index_2] += index_float
 
         # Save the new waveforms
-        self.magnitude[:, index_1] = output_mag_1 * self.strength_buffer[index_1]
-        self.magnitude[:, index_2] = output_mag_2 * self.strength_buffer[index_2]
+        self.magnitude[:, index_1] = np.pow(output_mag_1 * self.strength_buffer[index_1], 2)
+        self.magnitude[:, index_2] = np.pow(output_mag_2 * self.strength_buffer[index_2], 2)
         self.phase[:, index_1] = output_phase_1
         self.phase[:, index_2] = output_phase_2
 
