@@ -1,8 +1,10 @@
+import math
 import librosa
 import numpy as np
 import matplotlib.pyplot as plt
 import soundfile as sf
-from typing import Union
+from typing import Union, Tuple
+
 
 """spect.py
 
@@ -11,11 +13,30 @@ Reading, and writing to audio spectrograms
 Author : Logan R Boehm
 """
 
+#for math info see : https://dspguru.com/files/Sum_of_Two_Sinusoids.pdf
+def add_2_sine_waves(amplitude_1: Union[float, np.ndarray], phase_1: Union[float, np.ndarray], amplitude_2: Union[float, np.ndarray], phase_2: Union[float, np.ndarray]) -> Union[Tuple[float, float], Tuple[np.ndarray, np.ndarray]]:
+    """
+    Add 2 sine waves of equal frequency, and return the amplitude and phase of the new sine wave
+    """
+    phase_offset = phase_1 - phase_2
+    amp_out = np.sqrt(math.pow(amplitude_1, 2) + math.pow(amplitude_2, 2) + 2 * amplitude_1 * amplitude_2 * np.cos(phase_offset))
+    phase_out = np.arctan(amplitude_1 * np.sin(phase_offset) / (amplitude_1 * np.cos(phase_offset) + amplitude_2))
+    return (amp_out, phase_out + phase_2)
+
 class Spectrogram:
     """
     Readable, and writable spectrogram utility
     """
-    def __init__(self, audio_input: Union[str, np.ndarray], sample_rate: int = 44100, n_fft: int = 8192, hop_length: int = 16):
+    def __init__(self, magnitude: np.ndarray, phase: np.ndarray, sample_rate: int = 44100, n_fft: int = 8192, hop_length: int = 16):
+        self.magnitude = magnitude
+        self.phase = phase
+        self.strength_buffer = np.ones(self.magnitude.shape[1])
+        self.sr = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+
+    @staticmethod
+    def from_waveform(audio_input: Union[str, np.ndarray], sample_rate: int = 44100, n_fft: int = 8192, hop_length: int = 16):
         """
         Load audio from a file or NumPy array.
 
@@ -23,7 +44,7 @@ class Spectrogram:
         if the input is a numpy array, the sample rate can be specified with the
         sample_rate parameter. Otherwise it is determined automatically
         """
-        
+
         if isinstance(audio_input, str):  # Assume it's a filepath
             y, sr = librosa.load(audio_input, sr=None)  # Load audio file
         elif isinstance(audio_input, np.ndarray):  # Directly use the NumPy array
@@ -31,12 +52,29 @@ class Spectrogram:
             sr = sample_rate
         else:
             raise ValueError("Audio input must be a filepath or a NumPy array")
-        
-        self.sr = sr
-        self.n_fft = n_fft
-        self.hop_length = hop_length
+
         stft = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
-        self.magnitude, self.phase = np.abs(stft), np.angle(stft)
+        
+        return Spectrogram(np.abs(stft), np.angle(stft), sample_rate = sr, n_fft = n_fft, hop_length = hop_length)
+
+    @staticmethod
+    def empty(sample_rate = 44100, n_fft = 8192, hop_length = 16):
+        """
+        Create a new Spectrogram that is completely empty
+        """
+        n_y_index = (n_fft // 2) + 1
+        magnitude = np.empty((n_y_index, 0))
+        phase = np.empty((n_y_index, 0))
+        return Spectrogram(magnitude, phase, sample_rate = sample_rate, n_fft = n_fft, hop_length = hop_length)
+    
+    def frequencies(self):
+        """
+        Generate the list of frequencies for each bin in an FFT/spectrogram.
+        """
+        f_res = self.sr / self.n_fft
+        n_bins = (self.n_fft // 2) + 1
+        frequencies = list(np.arrange(0, n_bins) * f_res)
+        return frequencies
     
     def preview(self, filename: str)-> None:
         """
@@ -77,6 +115,84 @@ class Spectrogram:
         """
 
         return frequency * self.n_fft / self.sr
+    
+    def get_x_index (self, time: float) -> float:
+        """
+        Given a time in seconds, calculate the corresponding index in the array
+        """
+
+        return time * self.sr / self.hop_length
+    
+    def time_resolution(self):
+        """
+        Return the time delta between x values of the spectrogram
+        """
+        
+        return self.hop_length / self.sr
+    
+    def ensure_length(self, index_length):
+        """
+        Ensure that the matrix has enough room to store the index specified
+        Pad the internal matrices with zeros if it does not
+        """
+
+        ln = self.magnitude.shape[1]
+        n_y_index = (self.n_fft // 2) + 1
+
+        index_length = math.ceil(index_length)
+
+        n_to_add = index_length - ln + 1
+
+        if n_to_add >= 1:
+            pad_out = np.zeros((n_y_index, n_to_add))
+            self.magnitude = np.concatenate((self.magnitude, pad_out), axis = 1)
+            self.phase = np.concatenate((self.phase, pad_out), axis = 1)
+            self.strength_buffer = np.concatenate((self.strength_buffer, np.zeros(n_to_add)), axis = 1)
+    
+    def add_slice(self, slice_mag: np.ndarray, slice_phase: np.ndarray, index: float):
+        """
+        Add a slice of a spectrogram to this spectrogram,
+
+        the index can be a floating point number, and it will be coerced to the correct position
+        """
+
+        if index < 0:
+            raise IndexError("Cannot add to spectrogram, index is below zero")
+        
+        index_1 = int(index)
+        index_2 = index_1 + 1
+        index_float = index - index_1
+
+        self.ensure_length(index_2)
+
+
+        working_mag_1 = self.magnitude[:, index_1]
+        working_mag_2 = self.magnitude[:, index_2]
+        working_pha_1 = self.phase[:, index_1]
+        working_pha_2 = self.phase[:, index_2]
+        working_str_1 = self.strength_buffer[index_1]
+        working_str_2 = self.strength_buffer[index_2]
+
+        working_mag_1 /= working_str_1
+        working_mag_2 /= working_str_2
+
+        output_mag_1, output_phase_1 = add_2_sine_waves((1 - index_float) * slice_mag, slice_phase, working_mag_1, working_pha_1)
+        output_mag_2, output_phase_2 = add_2_sine_waves(index_float * slice_mag, slice_phase, working_mag_2, working_pha_2)
+
+        self.magnitude[:, index_1] = output_mag_1
+        self.magnitude[:, index_2] = output_mag_2
+        self.phase[:, index_1] = output_phase_1
+        self.phase[:, index_2] = output_phase_2
+
+        self.strength_buffer[index_1] += (1 - index_float)
+        self.strength_buffer[index_2] += index_float
+
+
+
+
+        
+
+
 
 
 if __name__ == '__main__':
