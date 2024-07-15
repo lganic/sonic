@@ -1,5 +1,4 @@
 import numpy as np
-import vector3
 from vector3 import Vector3, areColinear
 from typing import Tuple, Generator, List
 import math
