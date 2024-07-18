@@ -126,7 +126,7 @@ class Plane:
         t_pos = (self.coef_eq - reg_sum) / t_sum
         return input_ray.calculate_point(t_pos)
     
-    def intersection2d(self,Ray: Ray)-> Point:
+    def intersection2d(self, ray: Ray)-> Point:
         """
         Returns the X,Y coordinate of the intersection between Ray and plane
         The X and Y axis are the orientations specified, so orthogonal vectors
@@ -134,7 +134,7 @@ class Plane:
         orientation1 = X axis
         orientation2 = Y axis
         """
-        intersectionPoint = self.intersection(Ray)
+        intersectionPoint = self.intersection(ray)
         delta = intersectionPoint - self.location
         xDelta = delta.projectionLength(self.orientation1)
         yDelta = delta.projectionLength(self.orientation2)
